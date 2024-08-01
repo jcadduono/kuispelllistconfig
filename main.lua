@@ -26,6 +26,10 @@ addon:SetScript('OnEvent',function(self,event,...)
 end)
 addon:RegisterEvent('ADDON_LOADED')
 
+-- API version compatibility
+local GetSpellInfo = _G.GetSpellInfo or C_Spell.GetSpellInfo
+local GetSpellLink = _G.GetSpellLink or C_Spell.GetSpellLink
+
 -- local functions #############################################################
 local function SlashCommand(msg)
     if msg == 'dump' or strfind(msg,'^dump') then
@@ -68,8 +72,12 @@ local function SlashCommand(msg)
             end
         end
     else
-        InterfaceOptionsFrame_OpenToCategory(category)
-        InterfaceOptionsFrame_OpenToCategory(category)
+        if InterfaceOptionsFrame_OpenToCategory then
+            InterfaceOptionsFrame_OpenToCategory(category)
+            InterfaceOptionsFrame_OpenToCategory(category)
+        else
+            Settings.OpenToCategory(category)
+        end
     end
 end
 
@@ -230,10 +238,12 @@ do
         local f = CreateListItem(parent)
         f.env = id_or_name
 
-        local spell_id   = tonumber(id_or_name)
-        local spell_name = spell_id and GetSpellInfo(spell_id)
-        local spell_icon = spell_id and select(3,GetSpellInfo(spell_id))
-        f.spell_link     = spell_id and GetSpellLink(spell_id)
+        local spell_id, spell_name, spell_icon = tonumber(id_or_name)
+        if spell_id then
+            local _
+            spell_name, _, spell_icon = GetSpellInfo(spell_id)
+            f.spell_link = GetSpellLink(spell_id)
+        end
 
         if not spell_id or not spell_name then
             -- unknown spell id
@@ -568,7 +578,13 @@ function addon:ADDON_LOADED(loaded)
 
     self:SetScript('OnShow',self.OnShow)
 
-    InterfaceOptions_AddCategory(self)
+    if InterfaceOptions_AddCategory then
+        InterfaceOptions_AddCategory(self)
+    else
+        local panel = Settings.RegisterCanvasLayoutCategory(self, category)
+        panel.ID = category
+        Settings.RegisterAddOnCategory(panel)
+    end
 
     --luacheck:globals SLASH_KUISPELLLIST1 SLASH_KUISPELLLIST2
     SLASH_KUISPELLLIST1 = '/kuislc'
