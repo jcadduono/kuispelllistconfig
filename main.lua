@@ -27,7 +27,6 @@ end)
 addon:RegisterEvent('ADDON_LOADED')
 
 -- API version compatibility
-local GetSpellInfo = _G.GetSpellInfo or C_Spell.GetSpellInfo
 local GetSpellLink = _G.GetSpellLink or C_Spell.GetSpellLink
 
 -- local functions #############################################################
@@ -56,16 +55,23 @@ local function SlashCommand(msg)
 
         local KSL_ALL,KSL_OWN,KSL_NONE
         for i=1,40 do
-            local aura = { UnitAura('target',i,aura_filter) }
-            if aura[1] and aura[10] then
-                KSL_ALL = KSL:SpellIncludedAll(aura[10]) or KSL:SpellIncludedAll(strlower(aura[1]))
-                KSL_OWN = KSL:SpellIncludedOwn(aura[10]) or KSL:SpellIncludedOwn(strlower(aura[1]))
-                KSL_NONE = KSL:SpellExcluded(aura[10]) or KSL:SpellExcluded(strlower(aura[1]))
+            local aura
+            if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+                aura = C_UnitAuras.GetAuraDataByIndex('target',i,aura_filter)
+            else
+                local _
+                aura = {}
+                aura.name, _, _, _, _, _, _, _, aura.nameplateShowPersonal, aura.spellID, _, _, _, aura.isFromPlayerOrPlayerPet = UnitAura('target',i,aura_filter)
+            end
+            if aura and aura.name and aura.spellId then
+                KSL_ALL = KSL:SpellIncludedAll(aura.spellId) or KSL:SpellIncludedAll(strlower(aura.name))
+                KSL_OWN = KSL:SpellIncludedOwn(aura.spellId) or KSL:SpellIncludedOwn(strlower(aura.name))
+                KSL_NONE = KSL:SpellExcluded(aura.spellId) or KSL:SpellExcluded(strlower(aura.name))
 
                 print(string.format(
                     '|cff9966ffKSLC:|r [%s] %s | Default: |cff%s|r | KSLC: |cff%s|r',
-                    aura[10], aura[1],
-                    (aura[14] and L_ALL) or (aura[9] and L_OWN) or L_NONE,
+                    aura.spellId, aura.name,
+                    (aura.isFromPlayerOrPlayerPet and L_ALL) or (aura.nameplateShowPersonal and L_OWN) or L_NONE,
                     (KSL_ALL and L_ALL) or (KSL_OWN and L_OWN) or
                         (KSL_NONE and L_NONE) or L_INHERIT
                 ))
@@ -238,33 +244,37 @@ do
         local f = CreateListItem(parent)
         f.env = id_or_name
 
-        local spell_id, spell_name, spell_icon = tonumber(id_or_name)
-        if spell_id then
-            local _
-            spell_name, _, spell_icon = GetSpellInfo(spell_id)
-            f.spell_link = GetSpellLink(spell_id)
+        local spell
+        if C_Spell and C_Spell.GetSpellInfo then
+            spell = C_Spell.GetSpellInfo(id_or_name) or {}
+        else
+            spell = {
+                spellID = tonumber(id_or_name),
+            }
+            spell.name, spell.rank, spell.icon = GetSpellInfo(spell.spellID)
         end
 
-        if not spell_id or not spell_name then
+        if not spell.spellID or not spell.name then
             -- unknown spell id
-            spell_id = nil
-            spell_name = id_or_name
+            spell.spellID = nil
+            spell.name = id_or_name
 
             f:SetHeight(30)
             f.icon:SetSize(20,20)
         else
+            f.spell_link = GetSpellLink(spell.spellID)
             f:SetHeight(40)
             f.icon:SetSize(30,30)
         end
 
-        if spell_name then
-            f.name:SetText(spell_name)
+        if spell.name then
+            f.name:SetText(spell.name)
         end
-        if spell_id then
-            f.spellid:SetText(spell_id)
+        if spell.spellID then
+            f.spellid:SetText(spell.spellID)
         end
-        if spell_icon then
-            f.icon:SetTexture(spell_icon)
+        if spell.iconID then
+            f.icon:SetTexture(spell.iconID)
         end
 
         if parent.list == LIST_WHITELIST then
@@ -291,10 +301,14 @@ do
         local list_sorted = {}
 
         for k,_ in pairs(list) do
-            local id,name
-            id = tonumber(k)
-            name = id and GetSpellInfo(id)
-
+            local id,name = tonumber(k)
+            if id then
+                if C_Spell and C_Spell.GetSpellName then
+                    name = C_Spell.GetSpellName(id)
+                else
+                    name = GetSpellInfo(id)
+                end
+            end
             if id and name then
                 -- spell id and name
                 tinsert(list_sorted,{id,name})
